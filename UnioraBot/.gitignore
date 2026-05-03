@@ -1,0 +1,20 @@
+config.json
+.config.json
+
+event.db
+.event.db
+*.db
+*.sqlite3
+
+venv/
+.venv/
+env/
+
+__pycache__/
+*.pyc
+
+.idea/
+.vscode/
+
+# Системные файлы
+.DS_Store
