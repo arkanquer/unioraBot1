@@ -296,6 +296,25 @@ def get_db_file(message):
         except Exception as e:
             bot.send_message(message.chat.id, f"Ошибка: {e}")
 
+@bot.message_handler(content_types=['document'])
+def handle_db_restore(message):
+    if not is_admin(message.chat.id):
+        return
+
+    if message.document.file_name == 'event.db':
+        try:
+            file_info = bot.get_file(message.document.file_id)
+            downloaded_file = bot.download_file(file_info.file_path)
+
+            with open(DATABASE_PATH, 'wb') as new_db:
+                new_db.write(downloaded_file)
+
+            bot.reply_to(message, "✅ База данных успешно восстановлена!")
+        except Exception as e:
+            bot.reply_to(message, f"❌ Ошибка при восстановлении: {e}")
+    else:
+        bot.reply_to(message, "⚠️ Файл должен называться 'event.db'")
+
 
 if __name__ == '__main__':
     import time
