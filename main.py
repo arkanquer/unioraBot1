@@ -316,6 +316,7 @@ def handle_db_restore(message):
         bot.reply_to(message, "⚠️ Файл должен называться 'event.db'")
 
 
+#test commit
 if __name__ == '__main__':
     import time
 
