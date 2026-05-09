@@ -2,13 +2,15 @@ import telebot
 import sqlite3
 import json
 from telebot import types
+import os
+import time
 
-# Загрузка конфигурации
 with open('config.json', 'r', encoding='utf-8') as file:
     data = json.load(file)
 
 ADMIN_IDS = data['admin_ids']
 BOT_TOKEN = data['bot_token']
+DATABASE_PATH = '/app/data/event.db'
 
 bot = telebot.TeleBot(BOT_TOKEN)
 user_data = {}
@@ -22,9 +24,8 @@ event_info = (
     "Один день — несколько профессиональных треков. Эксперты поделятся опытом."
 )
 
-# --- Работа с БД ---
 def is_user_registered(user_id):
-    conn = sqlite3.connect('event.db')
+    conn = sqlite3.connect(DATABASE_PATH)
     cur = conn.cursor()
     cur.execute("SELECT 1 FROM users WHERE user_id = ?", (user_id,))
     exists = cur.fetchone()
@@ -32,18 +33,19 @@ def is_user_registered(user_id):
     return exists is not None
 
 def init_db():
-    conn = sqlite3.connect('event.db')
+    os.makedirs(os.path.dirname(DATABASE_PATH), exist_ok=True)
+    conn = sqlite3.connect(DATABASE_PATH)
     cur = conn.cursor()
     cur.execute('''CREATE TABLE IF NOT EXISTS users
-                   (
-                       id INTEGER PRIMARY KEY AUTOINCREMENT,
-                       user_id INTEGER,
-                       name TEXT,
-                       phone TEXT,
-                       business TEXT,
-                       region TEXT,
-                       source TEXT
-                   )''')
+                       (
+                           id INTEGER PRIMARY KEY AUTOINCREMENT,
+                           user_id INTEGER,
+                           name TEXT,
+                           phone TEXT,
+                           business TEXT,
+                           region TEXT,
+                           source TEXT
+                       )''')
     conn.commit()
     conn.close()
 
@@ -52,19 +54,13 @@ init_db()
 def is_admin(chat_id):
     return chat_id in ADMIN_IDS
 
-# --- Клавиатуры ---
 def get_main_menu_inline():
     markup = types.InlineKeyboardMarkup(row_width=1)
     markup.add(
         types.InlineKeyboardButton("🎉 О мероприятии", callback_data="main_about"),
-        # types.InlineKeyboardButton("👥 Эксперты", callback_data="main_experts"), # Отключено
         types.InlineKeyboardButton("📝 Зарегистрироваться", callback_data="main_register")
     )
     return markup
-
-# Логика экспертов закомментирована
-# def get_expert_card(index):
-#     ...
 
 def get_cancel_inline():
     markup = types.InlineKeyboardMarkup()
@@ -80,7 +76,6 @@ def get_reg_confirm_markup():
     )
     return markup
 
-# --- Обработка отмены ---
 def handle_reg_cancel(chat_id, message_id):
     bot.clear_step_handler_by_chat_id(chat_id)
     user_data.pop(chat_id, None)
@@ -95,7 +90,6 @@ def handle_reg_cancel(chat_id, message_id):
             self.text = "/start"
     send_welcome(FakeMsg(chat_id))
 
-# --- Процесс регистрации ---
 def process_name(message):
     chat_id = message.chat.id
     if message.text == "/cancel": return handle_reg_cancel(chat_id, message.message_id)
@@ -134,7 +128,6 @@ def process_region(message):
     bot.send_message(chat_id, "Данные зафиксированы.", reply_markup=types.ReplyKeyboardRemove())
     bot.send_message(chat_id, confirm_info, parse_mode="HTML", reply_markup=get_reg_confirm_markup())
 
-# --- Callback Handler ---
 @bot.callback_query_handler(func=lambda call: True)
 def callback_handler(call):
     chat_id = call.message.chat.id
@@ -143,10 +136,6 @@ def callback_handler(call):
     if call.data == "main_about":
         bot.send_message(chat_id, event_info, parse_mode="HTML")
         bot.answer_callback_query(call.id)
-
-    # Логика экспертов отключена
-    # elif call.data == "main_experts":
-    #     ...
 
     elif call.data == "main_register":
         if is_user_registered(chat_id):
@@ -160,7 +149,7 @@ def callback_handler(call):
     elif call.data == "reg_finish":
         d = user_data.get(chat_id)
         if d:
-            conn = sqlite3.connect('event.db')
+            conn = sqlite3.connect(DATABASE_PATH)
             cur = conn.cursor()
             cur.execute("INSERT INTO users (user_id, name, phone, business, region, source) VALUES (?,?,?,?,?,?)",
                         (chat_id, d['name'], d['phone'], d['business'], d['region'], d['source']))
@@ -181,10 +170,9 @@ def callback_handler(call):
         handle_reg_cancel(chat_id, mid)
         bot.answer_callback_query(call.id)
 
-    # --- Админ-панель ---
     elif call.data == "admin_view_users":
         if not is_admin(chat_id): return
-        conn = sqlite3.connect('event.db')
+        conn = sqlite3.connect(DATABASE_PATH)
         cur = conn.cursor()
         cur.execute("SELECT name, phone, business, region FROM users")
         rows = cur.fetchall()
@@ -201,7 +189,7 @@ def callback_handler(call):
 
     elif call.data == "admin_stats":
         if not is_admin(chat_id): return
-        conn = sqlite3.connect('event.db')
+        conn = sqlite3.connect(DATABASE_PATH)
         cur = conn.cursor()
         cur.execute("SELECT region, source FROM users")
         rows = cur.fetchall()
@@ -245,7 +233,6 @@ def callback_handler(call):
         send_welcome(FakeMsg(chat_id))
         bot.answer_callback_query(call.id)
 
-# --- Message Handlers ---
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     chat_id = message.chat.id
@@ -274,7 +261,7 @@ def welcome_admin(message):
 
 def process_broadcast(message):
     if not is_admin(message.chat.id): return
-    conn = sqlite3.connect('event.db')
+    conn = sqlite3.connect(DATABASE_PATH)
     cur = conn.cursor()
     cur.execute("SELECT user_id FROM users")
     users = cur.fetchall()
@@ -288,5 +275,24 @@ def process_broadcast(message):
     bot.send_message(message.chat.id, f"✅ Рассылка завершена. Отправлено: {count} чел.")
     welcome_admin(message)
 
+@bot.message_handler(commands=['get_db'])
+def get_db_file(message):
+    if is_admin(message.chat.id):
+        try:
+            with open(DATABASE_PATH, 'rb') as f:
+                bot.send_document(message.chat.id, f)
+        except Exception as e:
+            bot.send_message(message.chat.id, f"Ошибка: {e}")
+
+
 if __name__ == '__main__':
-    bot.polling(none_stop=True)
+    import time
+
+    print("Бот запущен...")
+    while True:
+        try:
+            bot.polling(none_stop=True, interval=0, timeout=60)
+        except Exception as e:
+            print(f"Ошибка сети: {e}")
+            time.sleep(5)
+            print("🔄 Попытка перезапуска бота...")
