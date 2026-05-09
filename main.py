@@ -5,13 +5,25 @@ from telebot import types
 import os
 import time
 
-with open('config.json', 'r', encoding='utf-8') as file:
-    data = json.load(file)
+BOT_TOKEN = os.getenv('BOT_TOKEN')
+ADMIN_IDS_RAW = os.getenv('ADMIN_IDS')
 
-ADMIN_IDS = data['admin_ids']
-BOT_TOKEN = data['bot_token']
+if not BOT_TOKEN:
+    try:
+        with open('config.json', 'r', encoding='utf-8') as file:
+            config = json.load(file)
+            BOT_TOKEN = config['bot_token']
+            ADMIN_IDS = config['config_ids']
+    except FileNotFoundError:
+        print("❌ Ошибка: Файл config.json не найден и переменные не заданы!")
+        exit(1)
+else:
+    try:
+        ADMIN_IDS = json.loads(ADMIN_IDS_RAW)
+    except:
+        ADMIN_IDS = [int(ADMIN_IDS_RAW)]
+
 DATABASE_PATH = '/app/data/event.db'
-
 bot = telebot.TeleBot(BOT_TOKEN)
 user_data = {}
 topics = ["поиск жилья", "финансы", "медицина", "поиск работы", "легализация"]
