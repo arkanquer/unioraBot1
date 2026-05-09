@@ -13,7 +13,7 @@ if not BOT_TOKEN:
         with open('config.json', 'r', encoding='utf-8') as file:
             config = json.load(file)
             BOT_TOKEN = config['bot_token']
-            ADMIN_IDS = config['config_ids']
+            ADMIN_IDS = config['configit _ids']
     except FileNotFoundError:
         print("❌ Ошибка: Файл config.json не найден и переменные не заданы!")
         exit(1)
